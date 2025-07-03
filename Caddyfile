@@ -1,11 +1,64 @@
-# Escucha en el puerto 80 internamente.
-# Al no especificar un dominio aquí, Caddy no intentará gestionar HTTPS.
-:80 {
-		# Opcional: añade logs para ver las peticiones, muy útil para depurar.
-		log
+# Bloque de configuración global.
+# Desactivamos HTTPS porque Railway ya lo gestiona por nosotros.
+{
+	auto_https off
+}
 
-		# Las mismas reglas de redirección que ya tenías
-		reverse_proxy /api* {$APPFLOWY_CLOUD_HOST}:{$APPFLOWY_CLOUD_PORT}
-		reverse_proxy /gotrue* {$GOTRUE_HOST}:{$GOTRUE_PORT}
-		reverse_proxy /minio* {$MINIO_HOST}:{$MINIO_API_PORT}
+# El bloque principal del sitio. Caddy escuchará en el puerto que Railway le asigne.
+:{$PORT} {
+	# --- Manejo Centralizado de CORS ---
+	# Esta sección intercepta todas las solicitudes 'preflight' (OPTIONS)
+	# y responde inmediatamente con los permisos necesarios.
+	# Esto resuelve el error de CORS de una vez por todas.
+	@options method OPTIONS
+	handle @options {
+		# Respondemos que el origen de tu web está permitido.
+		header Access-Control-Allow-Origin "{$ENV_WEB_ORIGIN}"
+		# Permitimos los métodos estándar.
+		header Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+		# Permitimos CUALQUIER encabezado, incluyendo tu "Redirect_to" personalizado.
+		header Access-Control-Allow-Headers "*"
+		# Permitimos que se envíen cookies y credenciales.
+		header Access-Control-Allow-Credentials "true"
+		# Guardamos en caché esta respuesta 'preflight' por un día.
+		header Access-Control-Max-Age "86400"
+		# Respondemos con "204 No Content", que es la respuesta estándar y correcta.
+		respond 204
+	}
+
+	# --- Enrutamiento de la API ---
+	# Este bloque 'route' asegura que las peticiones se evalúen en el orden correcto.
+
+	# Regla para la API de autenticación.
+	# Todas las peticiones a /gotrue/* se enviarán a GoTrue.
+	handle_path /gotrue/* {
+		# Quitamos el prefijo '/gotrue' antes de enviarlo al servicio interno.
+		# Ejemplo: /gotrue/magiclink -> /magiclink
+		uri strip_prefix /gotrue
+		reverse_proxy {$ENV_GOTRUE}:{$ENV_GOTRUE_PORT}
+	}
+
+	# Regla para la API de almacenamiento de archivos.
+	handle_path /minio-api/* {
+		reverse_proxy {$ENV_MINIO}:{$ENV_MINIO_PORT}
+	}
+
+	# Regla para los WebSockets de colaboración en tiempo real.
+	handle_path /ws/* {
+		reverse_proxy {$ENV_APPFLOWY_CLOUD}:{$ENV_APPFLOWY_CLOUD_PORT}
+	}
+	
+	# Regla por defecto para todo lo demás.
+	# Cualquier otra petición se envía al backend principal de AppFlowy.
+	handle {
+		reverse_proxy {$ENV_APPFLOWY_CLOUD}:{$ENV_APPFLOWY_CLOUD_PORT}
+	}
+
+	# --- Encabezados de Respuesta Globales ---
+	# Estos encabezados se añaden a todas las respuestas que SÍ pasan por el proxy
+	# (es decir, las que no son 'preflight').
+	header {
+		Access-Control-Allow-Origin "{$ENV_WEB_ORIGIN}"
+		Access-Control-Allow-Credentials "true"
+	}
 }
