@@ -1,17 +1,11 @@
-# Este Caddyfile está modificado para funcionar con el dominio por defecto de Railway.
+# Escucha en el puerto 80 internamente.
+# Al no especificar un dominio aquí, Caddy no intentará gestionar HTTPS.
+:80 {
+		# Opcional: añade logs para ver las peticiones, muy útil para depurar.
+		log
 
-# Usaremos una variable de entorno para el dominio, que Railway nos proporcionará.
-{$CADDY_DOMAIN} {
-
-    # Ruta para el backend principal de AppFlowy
-    # Todas las peticiones a /api/* irán al servicio appflowy-cloud
-    reverse_proxy /api* {$APPFLOWY_CLOUD_HOST}:{$APPFLOWY_CLOUD_PORT}
-
-    # Ruta para la autenticación
-    # Todas las peticiones a /gotrue/* irán al servicio de autenticación
-    reverse_proxy /gotrue* {$GOTRUE_HOST}:{$GOTRUE_PORT}
-
-    # Ruta para el almacenamiento de archivos (MinIO)
-    # Todas las peticiones a /minio/* irán al servicio de MinIO
-    reverse_proxy /minio* {$MINIO_HOST}:{$MINIO_API_PORT}
+		# Las mismas reglas de redirección que ya tenías
+		reverse_proxy /api* {$APPFLOWY_CLOUD_HOST}:{$APPFLOWY_CLOUD_PORT}
+		reverse_proxy /gotrue* {$GOTRUE_HOST}:{$GOTRUE_PORT}
+		reverse_proxy /minio* {$MINIO_HOST}:{$MINIO_API_PORT}
 }
